@@ -11,7 +11,7 @@ import CurrenciesPage from '@/pages/Currencies';
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/Price-Compare">
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Layout />}>
