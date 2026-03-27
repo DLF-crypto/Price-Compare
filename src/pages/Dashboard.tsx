@@ -85,11 +85,9 @@ const PIE_COLORS = ['#3b82f6', '#8b5cf6'];
 const BAR_COLOR = '#3b82f6';
 
 // ---------- Custom label for PieChart ----------
-const renderPieLabel = ({
-  cx, cy, midAngle, innerRadius, outerRadius, name, value,
-}: {
-  cx: number; cy: number; midAngle: number; innerRadius: number; outerRadius: number; name: string; value: number;
-}) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const renderPieLabel = (props: any) => {
+  const { cx, cy, midAngle, innerRadius, outerRadius, name, value } = props;
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -222,7 +220,7 @@ export default function DashboardPage() {
                 <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#64748b' }} />
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                  formatter={(value: number) => [`${value} 个`, '产品数']}
+                  formatter={(value) => [`${value} 个`, '产品数']}
                 />
                 <Bar dataKey="count" fill={BAR_COLOR} radius={[6, 6, 0, 0]} maxBarSize={48} />
               </BarChart>
@@ -254,7 +252,7 @@ export default function DashboardPage() {
                 </Pie>
                 <Tooltip
                   contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
-                  formatter={(value: number) => [`${value} 个`, '产品数']}
+                  formatter={(value) => [`${value} 个`, '产品数']}
                 />
                 <Legend
                   verticalAlign="bottom"
