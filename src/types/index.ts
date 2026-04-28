@@ -73,6 +73,7 @@ export interface FirstMileConfig {
   price: number;
   currencyId: string;
   volumeRatio: number;
+  discount?: number;
 }
 
 export interface CustomsConfig {
@@ -80,6 +81,7 @@ export interface CustomsConfig {
   price: number;
   currencyId: string;
   taxRate?: number;
+  discount?: number;
 }
 
 export interface LastMileConfig {
@@ -92,6 +94,7 @@ export interface LastMileConfig {
   continuedWeight?: number;
   firstWeightPrice?: number;
   continuedWeightPrice?: number;
+  discount?: number;
 }
 
 export interface Product {
@@ -115,6 +118,7 @@ export interface Product {
   continuedWeight?: number;
   firstWeightPrice?: number;
   continuedWeightPrice?: number;
+  discount?: number;
   country: string;
   status: 'active' | 'inactive';
   createdAt: string;
@@ -158,4 +162,84 @@ export interface CompareResult {
   firstMileCost?: number;
   customsCost?: number;
   lastMileCost?: number;
+}
+
+// ============================================================
+// 产品优选 (Product Optimization) types
+// ============================================================
+
+export interface WaybillRow {
+  trackingNo: string;
+  country: string;
+  weight: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  declaredValue?: number;
+  declaredCurrencyId?: string;
+  cargoType: CargoType;
+}
+
+export interface OptimizeCostDetail {
+  productType: ProductType;
+  chargeableWeight: number;
+  volumeWeight: number;
+  // full_service
+  freight?: number;
+  handlingFee?: number;
+  // combined
+  firstMileCost?: number;
+  customsCost?: number;
+  lastMileCost?: number;
+  fmChargeableWeight?: number;
+  lmChargeableWeight?: number;
+  // common
+  tax: number;
+  taxRate: number;
+  discount: string;
+}
+
+export interface OptimizeResult {
+  trackingNo: string;
+  country: string;
+  cargoType: CargoType;
+  weight: number;
+  optimalProductId?: string;
+  optimalProductName?: string;
+  optimalProductType?: ProductType;
+  chargeableWeight?: number;
+  totalCost?: number;
+  discount?: string;
+  costDetail?: OptimizeCostDetail;
+  candidateCount: number;
+  noMatchReason?: string;
+}
+
+// ============================================================
+// 批量产品试算 (Batch Calculate) types
+// ============================================================
+
+export interface BatchCalcRow {
+  trackingNo: string;
+  productName: string;
+  country: string;
+  weight: number;
+  length?: number;
+  width?: number;
+  height?: number;
+  declaredValue?: number;
+  declaredCurrencyId?: string;
+}
+
+export interface BatchCalcResult {
+  trackingNo: string;
+  productName: string;
+  productType?: ProductType;
+  country: string;
+  weight: number;
+  chargeableWeight?: number;
+  totalCost?: number;
+  discount?: string;
+  costDetail?: OptimizeCostDetail;
+  errorReason?: string;
 }

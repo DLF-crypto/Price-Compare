@@ -90,7 +90,8 @@ export default function ComparePage() {
 
           const pTaxRate = product.taxRate || 0;
           const tax = declaredValueRMB * (pTaxRate / 100);
-          const totalCost = totalFreight + tax;
+          const discount = product.discount ?? 100;
+          const totalCost = totalFreight * (discount / 100) + tax;
           compareResults.push({
             productType: 'full_service',
             pricingMode: 'first_weight',
@@ -125,7 +126,8 @@ export default function ComparePage() {
 
           const pTaxRate = product.taxRate || 0;
           const tax = declaredValueRMB * (pTaxRate / 100);
-          const totalCost = totalFreight + totalHandlingFee + tax;
+          const discount = product.discount ?? 100;
+          const totalCost = (totalFreight + totalHandlingFee) * (discount / 100) + tax;
 
           compareResults.push({
             productType: 'full_service',
@@ -165,10 +167,10 @@ export default function ComparePage() {
         const fmChargeableWeight = Math.max(w, fmVolumeWeight);
 
         // Head cost (convert to RMB)
-        const fmCostRMB = fmChargeableWeight * toRMB(fm.price, fm.currencyId);
+        const fmCostRMB = fmChargeableWeight * toRMB(fm.price, fm.currencyId) * ((fm.discount ?? 100) / 100);
 
         // Customs cost: uses HEAD's chargeable weight
-        const cmCostRMB = fmChargeableWeight * toRMB(cm.price, cm.currencyId);
+        const cmCostRMB = fmChargeableWeight * toRMB(cm.price, cm.currencyId) * ((cm.discount ?? 100) / 100);
 
         // Last mile: independent volume weight
         const lmVolumeWeight = lm.volumeRatio > 0 ? (l * wi * h) / lm.volumeRatio : 0;
@@ -206,7 +208,7 @@ export default function ComparePage() {
           lmWeightRangeLabel = `${matchedLmRange.minWeight}-${matchedLmRange.maxWeight}kg (尾程)`;
         }
 
-        const lmCost = lmFreight + lmHandlingFee;
+        const lmCost = (lmFreight + lmHandlingFee) * ((lm.discount ?? 100) / 100);
         const cmTaxRate = cm.taxRate || 0;
         const cmTax = declaredValueRMB * (cmTaxRate / 100);
         const totalCost = fmCostRMB + cmCostRMB + lmCost + cmTax;

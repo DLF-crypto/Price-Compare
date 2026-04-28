@@ -4,6 +4,7 @@ import { useProductStore } from '@/store/products';
 import { useSupplierStore } from '@/store/suppliers';
 import { useCountryStore } from '@/store/countries';
 import { useCurrencyStore } from '@/store/currencies';
+import { CARGO_TYPE_MAP } from '@/types';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, Legend,
@@ -83,6 +84,12 @@ const CurrencyIcon = () => (
 // ---------- Colors ----------
 const PIE_COLORS = ['#3b82f6', '#8b5cf6'];
 const BAR_COLOR = '#3b82f6';
+const CARGO_COLORS: Record<string, string> = {
+  general: '#64748b',
+  electric: '#f59e0b',
+  sensitive: '#f97316',
+  f_cargo: '#ef4444',
+};
 
 // ---------- Custom label for PieChart ----------
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -156,6 +163,23 @@ export default function DashboardPage() {
       { name: '全程产品', value: fullService },
       { name: '组合产品', value: combined },
     ];
+  }, [products]);
+
+  // Products by cargo type
+  const productsByCargoType = useMemo(() => {
+    const map = new Map<string, number>();
+    products.forEach((p) => {
+      const ct = p.cargoType || 'general';
+      map.set(ct, (map.get(ct) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .map(([type, count]) => ({
+        type,
+        name: CARGO_TYPE_MAP[type as keyof typeof CARGO_TYPE_MAP] || type,
+        count,
+        fill: CARGO_COLORS[type] || '#94a3b8',
+      }))
+      .sort((a, b) => b.count - a.count);
   }, [products]);
 
   return (
@@ -264,6 +288,31 @@ export default function DashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Cargo Type Chart */}
+      <Card title="产品分布 - 按货物类型">
+        {productsByCargoType.length === 0 ? (
+          <div className="flex items-center justify-center text-slate-400 text-sm" style={{ height: '300px' }}>
+            暂无产品数据
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={productsByCargoType} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+              <XAxis dataKey="name" tick={{ fontSize: 13, fill: '#64748b' }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 13, fill: '#64748b' }} />
+              <Tooltip
+                contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13px' }}
+                formatter={(value) => [`${value} 个`, '产品数']}
+              />
+              <Bar dataKey="count" radius={[6, 6, 0, 0]} maxBarSize={48}>
+                {productsByCargoType.map((entry, idx) => (
+                  <Cell key={idx} fill={entry.fill} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </Card>
     </div>
   );
 }

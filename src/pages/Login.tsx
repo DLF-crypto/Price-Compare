@@ -36,7 +36,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gradient-to-br from-sky-50 via-white to-blue-50 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="text-center" style={{ marginBottom: '36px' }}>
-          <img src="/guokui_logo.svg" alt="锅盔" style={{ width: '64px', height: '64px', borderRadius: '16px', objectFit: 'contain', margin: '0 auto 16px', display: 'block' }} />
+          <img src={import.meta.env.BASE_URL + 'guokui_logo.svg'} alt="锅盔" style={{ width: '64px', height: '64px', borderRadius: '16px', objectFit: 'contain', margin: '0 auto 16px', display: 'block' }} />
           <h1 className="text-2xl font-bold text-slate-800">锅盔专线比价系统</h1>
         </div>
 

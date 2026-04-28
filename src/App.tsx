@@ -8,6 +8,8 @@ import SuppliersPage from '@/pages/Suppliers';
 import EmployeesPage from '@/pages/Employees';
 import CountriesPage from '@/pages/Countries';
 import CurrenciesPage from '@/pages/Currencies';
+import ProductOptimizePage from '@/pages/ProductOptimize';
+import BatchCalculatePage from '@/pages/BatchCalculate';
 
 export default function App() {
   return (
@@ -23,6 +25,8 @@ export default function App() {
           <Route path="employees" element={<EmployeesPage />} />
           <Route path="countries" element={<CountriesPage />} />
           <Route path="currencies" element={<CurrenciesPage />} />
+          <Route path="product-optimize" element={<ProductOptimizePage />} />
+          <Route path="batch-calculate" element={<BatchCalculatePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

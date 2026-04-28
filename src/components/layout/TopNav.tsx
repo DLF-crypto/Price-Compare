@@ -6,7 +6,7 @@ export function TopNav() {
   return (
     <header className="h-14 bg-white border-b border-slate-200 flex items-center justify-between shrink-0 z-30" style={{ padding: '0 24px 0 24px' }}>
       <div className="flex items-center gap-3">
-        <img src="/guokui_logo.svg" alt="锅盔" style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'contain' }} />
+        <img src={import.meta.env.BASE_URL + 'guokui_logo.svg'} alt="锅盔" style={{ width: '32px', height: '32px', borderRadius: '8px', objectFit: 'contain' }} />
         <h1 className="text-base font-bold text-slate-800 tracking-tight">
           锅盔专线比价系统
         </h1>

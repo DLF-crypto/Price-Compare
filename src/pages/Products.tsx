@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -13,15 +13,30 @@ import { useCountryStore } from '@/store/countries';
 import { useCurrencyStore } from '@/store/currencies';
 import type { Product, ProductType, WeightRange, CargoType, PricingMode } from '@/types';
 import { CARGO_TYPE_OPTIONS, CARGO_TYPE_MAP, PRICING_MODE_OPTIONS, WEIGHT_STEP_OPTIONS } from '@/types';
+import {
+  generateFullServiceTemplate,
+  generateCombinedTemplate,
+  parseFullServiceImport,
+  parseCombinedImport,
+} from '@/lib/import-products';
+import type { ImportResult } from '@/lib/import-products';
 
 export default function ProductsPage() {
-  const { products, load: loadProducts, add, update, remove } = useProductStore();
+  const { products, load: loadProducts, add, update, remove, batchImport } = useProductStore();
   const { suppliers, load: loadSuppliers } = useSupplierStore();
   const { countries, load: loadCountries } = useCountryStore();
   const { currencies, load: loadCurrencies } = useCurrencyStore();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
+
+  // Import modal state
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importType, setImportType] = useState<ProductType>('full_service');
+  const [importPhase, setImportPhase] = useState<'upload' | 'preview' | 'done'>('upload');
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+  const [importLoading, setImportLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Step control
   const [formStep, setFormStep] = useState<1 | 2>(1);
@@ -44,6 +59,7 @@ export default function ProductsPage() {
   const [continuedWeightPrice, setContinuedWeightPrice] = useState('');
   const [fullCurrencyId, setFullCurrencyId] = useState('');
   const [fullTaxRate, setFullTaxRate] = useState('0');
+  const [fullDiscount, setFullDiscount] = useState('100');
 
   // Combined product form state - first mile
   const [fmSupplierId, setFmSupplierId] = useState('');
@@ -69,7 +85,9 @@ export default function ProductsPage() {
   const [lmContinuedWeight, setLmContinuedWeight] = useState('0.5');
   const [lmFirstWeightPrice, setLmFirstWeightPrice] = useState('');
   const [lmContinuedWeightPrice, setLmContinuedWeightPrice] = useState('');
-
+  const [fmDiscount, setFmDiscount] = useState('100');
+  const [cmDiscount, setCmDiscount] = useState('100');
+  const [lmDiscount, setLmDiscount] = useState('100');
   useEffect(() => {
     loadProducts();
     loadSuppliers();
@@ -111,7 +129,63 @@ export default function ProductsPage() {
     setLmContinuedWeightPrice('');
     setFullCurrencyId('');
     setFullTaxRate('0');
+    setFullDiscount('100');
+    setFmDiscount('100');
+    setCmDiscount('100');
+    setLmDiscount('100');
     setEditing(null);
+  };
+
+  // === Import handlers ===
+  const openImportModal = (type: ProductType) => {
+    setImportType(type);
+    setImportPhase('upload');
+    setImportResult(null);
+    setImportLoading(false);
+    setImportModalOpen(true);
+  };
+
+  const closeImportModal = () => {
+    setImportModalOpen(false);
+    setImportResult(null);
+    setImportLoading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleDownloadTemplate = () => {
+    const blob = importType === 'full_service'
+      ? generateFullServiceTemplate()
+      : generateCombinedTemplate();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = importType === 'full_service' ? '全程产品导入模板.xlsx' : '组合产品导入模板.xlsx';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImportLoading(true);
+    try {
+      const ctx = { suppliers, currencies, countries, existingProductNames: products.map(p => p.name) };
+      const result = importType === 'full_service'
+        ? await parseFullServiceImport(file, ctx)
+        : await parseCombinedImport(file, ctx);
+      setImportResult(result);
+      setImportPhase('preview');
+    } catch (err) {
+      alert('解析文件失败: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const handleConfirmImport = () => {
+    if (!importResult || importResult.success.length === 0) return;
+    batchImport(importResult.success);
+    setImportPhase('done');
   };
 
   const openCreate = () => {
@@ -134,6 +208,7 @@ export default function ProductsPage() {
       setVolumeRatio(String(product.volumeRatio ?? 5000));
       setFullCurrencyId(product.currencyId || '');
       setFullTaxRate(String(product.taxRate ?? 0));
+      setFullDiscount(String(product.discount ?? 100));
       setWeightRanges(
         product.weightRanges && product.weightRanges.length > 0
           ? [...product.weightRanges]
@@ -151,12 +226,14 @@ export default function ProductsPage() {
         setFmPrice(String(product.firstMile.price));
         setFmCurrencyId(product.firstMile.currencyId);
         setFmVolumeRatio(String(product.firstMile.volumeRatio));
+        setFmDiscount(String(product.firstMile.discount ?? 100));
       }
       if (product.customs) {
         setCmSupplierId(product.customs.supplierId);
         setCmPrice(String(product.customs.price));
         setCmCurrencyId(product.customs.currencyId);
         setCmTaxRate(String(product.customs.taxRate ?? 0));
+        setCmDiscount(String(product.customs.discount ?? 100));
       }
       if (product.lastMile) {
         setLmSupplierId(product.lastMile.supplierId);
@@ -172,6 +249,7 @@ export default function ProductsPage() {
         setLmContinuedWeight(String(product.lastMile.continuedWeight ?? 0.5));
         setLmFirstWeightPrice(product.lastMile.firstWeightPrice != null ? String(product.lastMile.firstWeightPrice) : '');
         setLmContinuedWeightPrice(product.lastMile.continuedWeightPrice != null ? String(product.lastMile.continuedWeightPrice) : '');
+        setLmDiscount(String(product.lastMile.discount ?? 100));
       }
     }
     setModalOpen(true);
@@ -191,6 +269,7 @@ export default function ProductsPage() {
         volumeRatio: parseFloat(volumeRatio) || 5000,
         currencyId: fullCurrencyId,
         taxRate: parseFloat(fullTaxRate) || 0,
+        discount: fullDiscount !== '' ? parseFloat(fullDiscount) : 100,
         status,
         weightRanges,
         pricingMode: pricingMode as PricingMode,
@@ -220,18 +299,21 @@ export default function ProductsPage() {
           price: parseFloat(fmPrice) || 0,
           currencyId: fmCurrencyId,
           volumeRatio: parseFloat(fmVolumeRatio) || 5000,
+          discount: fmDiscount !== '' ? parseFloat(fmDiscount) : 100,
         },
         customs: {
           supplierId: cmSupplierId,
           price: parseFloat(cmPrice) || 0,
           currencyId: cmCurrencyId,
           taxRate: parseFloat(cmTaxRate) || 0,
+          discount: cmDiscount !== '' ? parseFloat(cmDiscount) : 100,
         },
         lastMile: {
           supplierId: lmSupplierId,
           currencyId: lmCurrencyId,
           volumeRatio: parseFloat(lmVolumeRatio) || 5000,
           weightRanges: lmWeightRanges,
+          discount: lmDiscount !== '' ? parseFloat(lmDiscount) : 100,
           pricingMode: lmPricingMode as PricingMode,
           ...(lmPricingMode === 'first_weight' ? {
             firstWeight: parseFloat(lmFirstWeight) || 0.5,
@@ -685,6 +767,11 @@ export default function ProductsPage() {
         firstWeightPrice, setFirstWeightPrice, continuedWeightPrice, setContinuedWeightPrice,
       )}
 
+      <div className="form-grid grid-cols-2">
+        <Input label="折扣(%)" type="number" value={fullDiscount} onChange={(e) => setFullDiscount(e.target.value)} placeholder="100" min="0" max="100" />
+        <div />
+      </div>
+
       <div className="form-actions">
         <Button variant="secondary" onClick={() => { if (!editing) { setFormStep(1); } else { setModalOpen(false); resetForm(); } }}>
           {editing ? '取消' : '上一步'}
@@ -789,6 +876,10 @@ export default function ProductsPage() {
             onChange={(e) => setFmCurrencyId(e.target.value)}
           />
         </div>
+        <div className="form-grid grid-cols-2">
+          <Input label="折扣(%)" type="number" value={fmDiscount} onChange={(e) => setFmDiscount(e.target.value)} placeholder="100" min="0" max="100" />
+          <div />
+        </div>
       </div>
 
       {/* Customs Section */}
@@ -823,6 +914,10 @@ export default function ProductsPage() {
         </div>
         <div className="form-grid grid-cols-2">
           <Input label="税率(%)" type="number" value={cmTaxRate} onChange={(e) => setCmTaxRate(e.target.value)} placeholder="0" />
+          <div />
+        </div>
+        <div className="form-grid grid-cols-2">
+          <Input label="折扣(%)" type="number" value={cmDiscount} onChange={(e) => setCmDiscount(e.target.value)} placeholder="100" min="0" max="100" />
           <div />
         </div>
       </div>
@@ -864,6 +959,10 @@ export default function ProductsPage() {
           lmFirstWeight, setLmFirstWeight, lmContinuedWeight, setLmContinuedWeight,
           lmFirstWeightPrice, setLmFirstWeightPrice, lmContinuedWeightPrice, setLmContinuedWeightPrice,
         )}
+        <div style={{ marginTop: '14px' }} className="form-grid grid-cols-2">
+          <Input label="折扣(%)" type="number" value={lmDiscount} onChange={(e) => setLmDiscount(e.target.value)} placeholder="100" min="0" max="100" />
+          <div />
+        </div>
       </div>
 
       <div className="form-actions">
@@ -888,12 +987,26 @@ export default function ProductsPage() {
           <h2 className="text-xl font-bold text-slate-800">产品维护</h2>
           <p className="text-sm text-slate-500 page-title-desc">管理物流产品及其重量段配置</p>
         </div>
-        <Button onClick={openCreate}>
-          <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          新增产品
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={() => openImportModal('full_service')}>
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            导入全程产品
+          </Button>
+          <Button variant="secondary" onClick={() => openImportModal('combined')}>
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+            导入组合产品
+          </Button>
+          <Button onClick={openCreate}>
+            <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            新增产品
+          </Button>
+        </div>
       </div>
 
       <Card>
@@ -916,6 +1029,217 @@ export default function ProductsPage() {
         {formStep === 1 && renderStep1()}
         {formStep === 2 && productType === 'full_service' && renderFullServiceForm()}
         {formStep === 2 && productType === 'combined' && renderCombinedForm()}
+      </Modal>
+
+      {/* Import Modal */}
+      <Modal
+        open={importModalOpen}
+        onClose={closeImportModal}
+        title={`批量导入${importType === 'full_service' ? '全程' : '组合'}产品`}
+        width="max-w-2xl"
+      >
+        {importPhase === 'upload' && (
+          <div>
+            {/* Template download */}
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#eff6ff',
+              borderRadius: '10px',
+              marginBottom: '20px',
+            }}>
+              <div style={{ fontSize: '14px', fontWeight: 500, color: '#1e40af', marginBottom: '8px' }}>
+                第一步：下载模板
+              </div>
+              <p style={{ fontSize: '13px', color: '#3b82f6', marginBottom: '12px' }}>
+                请先下载 Excel 模板，按照模板中的说明填写产品数据后再上传。
+              </p>
+              <Button size="sm" variant="secondary" onClick={handleDownloadTemplate}>
+                <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                下载{importType === 'full_service' ? '全程' : '组合'}产品模板
+              </Button>
+            </div>
+
+            {/* File upload */}
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#f8fafc',
+              borderRadius: '10px',
+              border: '2px dashed #cbd5e1',
+            }}>
+              <div style={{ fontSize: '14px', fontWeight: 500, color: '#334155', marginBottom: '8px' }}>
+                第二步：上传文件
+              </div>
+              <p style={{ fontSize: '13px', color: '#64748b', marginBottom: '12px' }}>
+                选择填写好的 Excel 文件（.xlsx 格式），系统将自动解析并校验数据。
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleFileUpload}
+                style={{ display: 'none' }}
+              />
+              <Button
+                variant="secondary"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importLoading}
+              >
+                {importLoading ? (
+                  <>
+                    <svg className="w-4 h-4 mr-1.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                    </svg>
+                    解析中...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    选择文件上传
+                  </>
+                )}
+              </Button>
+            </div>
+
+            <div className="form-actions" style={{ marginTop: '20px' }}>
+              <Button variant="secondary" onClick={closeImportModal}>取消</Button>
+            </div>
+          </div>
+        )}
+
+        {importPhase === 'preview' && importResult && (
+          <div>
+            {/* Summary stats */}
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+              <div style={{
+                flex: 1, padding: '14px', borderRadius: '10px',
+                backgroundColor: '#f0fdf4', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: '#16a34a' }}>
+                  {importResult.success.length}
+                </div>
+                <div style={{ fontSize: '12px', color: '#15803d' }}>可导入</div>
+              </div>
+              <div style={{
+                flex: 1, padding: '14px', borderRadius: '10px',
+                backgroundColor: importResult.errors.length > 0 ? '#fef2f2' : '#f8fafc', textAlign: 'center',
+              }}>
+                <div style={{ fontSize: '24px', fontWeight: 700, color: importResult.errors.length > 0 ? '#dc2626' : '#94a3b8' }}>
+                  {importResult.errors.length}
+                </div>
+                <div style={{ fontSize: '12px', color: importResult.errors.length > 0 ? '#b91c1c' : '#94a3b8' }}>有错误</div>
+              </div>
+            </div>
+
+            {/* Error details */}
+            {importResult.errors.length > 0 && (
+              <div style={{
+                marginBottom: '16px',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid #fecaca',
+                borderRadius: '10px',
+                padding: '12px',
+                backgroundColor: '#fff5f5',
+              }}>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#dc2626', marginBottom: '8px' }}>
+                  以下行存在错误，将跳过导入：
+                </div>
+                {importResult.errors.map((err, idx) => (
+                  <div key={idx} style={{
+                    padding: '8px 10px',
+                    marginBottom: '6px',
+                    backgroundColor: '#fff',
+                    borderRadius: '6px',
+                    border: '1px solid #fee2e2',
+                    fontSize: '12px',
+                  }}>
+                    <span style={{ fontWeight: 600, color: '#991b1b' }}>
+                      第{err.row}行 "{err.name}"：
+                    </span>
+                    <span style={{ color: '#b91c1c' }}>
+                      {err.errors.join('；')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Preview of successful products */}
+            {importResult.success.length > 0 && (
+              <div style={{
+                marginBottom: '16px',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                border: '1px solid #e2e8f0',
+                borderRadius: '10px',
+              }}>
+                <table style={{ width: '100%', fontSize: '12px', borderCollapse: 'collapse' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc' }}>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#475569' }}>#</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#475569' }}>产品名称</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#475569' }}>国家</th>
+                      <th style={{ padding: '8px 12px', textAlign: 'left', borderBottom: '1px solid #e2e8f0', fontWeight: 600, color: '#475569' }}>货物类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importResult.success.map((p, idx) => (
+                      <tr key={p.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '6px 12px', color: '#94a3b8' }}>{idx + 1}</td>
+                        <td style={{ padding: '6px 12px', color: '#1e293b' }}>{p.name}</td>
+                        <td style={{ padding: '6px 12px', color: '#475569' }}>{p.country}</td>
+                        <td style={{ padding: '6px 12px', color: '#475569' }}>{p.cargoType ? (CARGO_TYPE_MAP[p.cargoType] || p.cargoType) : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            <div className="form-actions">
+              <Button variant="secondary" onClick={() => {
+                setImportPhase('upload');
+                setImportResult(null);
+                if (fileInputRef.current) fileInputRef.current.value = '';
+              }}>
+                重新上传
+              </Button>
+              <Button
+                onClick={handleConfirmImport}
+                disabled={importResult.success.length === 0}
+              >
+                确认导入 {importResult.success.length} 个产品
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {importPhase === 'done' && importResult && (
+          <div style={{ textAlign: 'center', padding: '30px 0' }}>
+            <div style={{
+              width: '56px', height: '56px', borderRadius: '50%',
+              backgroundColor: '#dcfce7', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', margin: '0 auto 16px',
+            }}>
+              <svg style={{ width: '28px', height: '28px', color: '#16a34a' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <div style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
+              导入完成
+            </div>
+            <p style={{ fontSize: '14px', color: '#64748b', marginBottom: '24px' }}>
+              成功导入 {importResult.success.length} 个{importType === 'full_service' ? '全程' : '组合'}产品
+              {importResult.errors.length > 0 && `，${importResult.errors.length} 行因错误被跳过`}
+            </p>
+            <Button onClick={closeImportModal}>关闭</Button>
+          </div>
+        )}
       </Modal>
     </div>
   );
