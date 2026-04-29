@@ -1,43 +1,69 @@
 import { create } from 'zustand';
-import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/lib/supabase';
 import type { User } from '@/types';
 
 interface EmployeeState {
   employees: User[];
-  load: () => void;
-  add: (data: Omit<User, 'id' | 'createdAt'>) => void;
-  update: (id: string, data: Partial<User>) => void;
-  remove: (id: string) => void;
+  load: () => Promise<void>;
+  add: (data: { name: string; email: string; password: string; role: 'ADMIN' | 'USER'; status: 'active' | 'inactive' }) => Promise<string | null>;
+  update: (id: string, data: Partial<Pick<User, 'name' | 'role' | 'status'>>) => Promise<void>;
+  remove: (id: string) => Promise<void>;
 }
 
-function persist(employees: User[]) {
-  localStorage.setItem('users', JSON.stringify(employees));
-}
-
-export const useEmployeeStore = create<EmployeeState>((set, get) => ({
+export const useEmployeeStore = create<EmployeeState>((set) => ({
   employees: [],
 
-  load: () => {
-    const data: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    set({ employees: data });
+  load: async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ employees: (data ?? []) as User[] });
   },
 
-  add: (data) => {
-    const item: User = { ...data, id: uuidv4(), createdAt: new Date().toISOString() };
-    const updated = [...get().employees, item];
-    set({ employees: updated });
-    persist(updated);
+  add: async ({ name, email, password, role, status }) => {
+    // 1. Create auth user
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+    });
+    if (authError) return authError.message;
+    if (!authData.user) return '创建用户失败';
+
+    // 2. Insert profile
+    const { error: profileError } = await supabase.from('profiles').insert({
+      id: authData.user.id,
+      name,
+      email,
+      role,
+      status,
+    });
+    if (profileError) return profileError.message;
+
+    // 3. Reload
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ employees: (data ?? []) as User[] });
+    return null;
   },
 
-  update: (id, data) => {
-    const updated = get().employees.map((e) => (e.id === id ? { ...e, ...data } : e));
-    set({ employees: updated });
-    persist(updated);
+  update: async (id, data) => {
+    await supabase.from('profiles').update(data).eq('id', id);
+    const { data: all } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ employees: (all ?? []) as User[] });
   },
 
-  remove: (id) => {
-    const updated = get().employees.filter((e) => e.id !== id);
-    set({ employees: updated });
-    persist(updated);
+  remove: async (id) => {
+    await supabase.from('profiles').delete().eq('id', id);
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ employees: (data ?? []) as User[] });
   },
 }));

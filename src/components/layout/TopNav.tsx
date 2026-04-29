@@ -27,7 +27,7 @@ export function TopNav() {
           </div>
         </div>
         <button
-          onClick={logout}
+          onClick={() => logout()}
           className="text-slate-500 hover:text-red-500 transition-colors hover:bg-red-50 rounded"
           style={{ fontSize: '13px', padding: '4px 10px' }}
         >

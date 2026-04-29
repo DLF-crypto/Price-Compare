@@ -1,43 +1,52 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/lib/supabase';
 import type { Currency } from '@/types';
 
 interface CurrencyState {
   currencies: Currency[];
-  load: () => void;
-  add: (data: Omit<Currency, 'id' | 'createdAt'>) => void;
-  update: (id: string, data: Partial<Currency>) => void;
-  remove: (id: string) => void;
+  load: () => Promise<void>;
+  add: (data: Omit<Currency, 'id' | 'createdAt'>) => Promise<void>;
+  update: (id: string, data: Partial<Currency>) => Promise<void>;
+  remove: (id: string) => Promise<void>;
 }
 
-function persist(currencies: Currency[]) {
-  localStorage.setItem('currencies', JSON.stringify(currencies));
-}
-
-export const useCurrencyStore = create<CurrencyState>((set, get) => ({
+export const useCurrencyStore = create<CurrencyState>((set) => ({
   currencies: [],
 
-  load: () => {
-    const data: Currency[] = JSON.parse(localStorage.getItem('currencies') || '[]');
-    set({ currencies: data });
+  load: async () => {
+    const { data } = await supabase
+      .from('currencies')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ currencies: (data ?? []) as Currency[] });
   },
 
-  add: (data) => {
-    const item: Currency = { ...data, id: uuidv4(), createdAt: new Date().toISOString() };
-    const updated = [...get().currencies, item];
-    set({ currencies: updated });
-    persist(updated);
+  add: async (data) => {
+    const item = { ...data, id: uuidv4() };
+    await supabase.from('currencies').insert(item);
+    const { data: all } = await supabase
+      .from('currencies')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ currencies: (all ?? []) as Currency[] });
   },
 
-  update: (id, data) => {
-    const updated = get().currencies.map((c) => (c.id === id ? { ...c, ...data } : c));
-    set({ currencies: updated });
-    persist(updated);
+  update: async (id, data) => {
+    await supabase.from('currencies').update(data).eq('id', id);
+    const { data: all } = await supabase
+      .from('currencies')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ currencies: (all ?? []) as Currency[] });
   },
 
-  remove: (id) => {
-    const updated = get().currencies.filter((c) => c.id !== id);
-    set({ currencies: updated });
-    persist(updated);
+  remove: async (id) => {
+    await supabase.from('currencies').delete().eq('id', id);
+    const { data } = await supabase
+      .from('currencies')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ currencies: (data ?? []) as Currency[] });
   },
 }));

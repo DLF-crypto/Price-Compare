@@ -1,32 +1,70 @@
 import { create } from 'zustand';
+import { supabase } from '@/lib/supabase';
 import type { User } from '@/types';
 
 interface AuthState {
   user: User | null;
-  login: (email: string, password: string) => boolean;
-  logout: () => void;
+  isLoading: boolean;
+  init: () => Promise<void>;
+  login: (email: string, password: string) => Promise<string | null>;
+  logout: () => Promise<void>;
   isAdmin: () => boolean;
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
-  user: JSON.parse(localStorage.getItem('currentUser') || 'null'),
+  user: null,
+  isLoading: true,
 
-  login: (email: string, password: string) => {
-    const users: User[] = JSON.parse(localStorage.getItem('users') || '[]');
-    const found = users.find(
-      (u) => u.email === email && u.password === password && u.status === 'active'
-    );
-    if (found) {
-      set({ user: found });
-      localStorage.setItem('currentUser', JSON.stringify(found));
-      return true;
+  init: async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile && profile.status === 'active') {
+          set({ user: profile as User, isLoading: false });
+          return;
+        }
+        // inactive user — sign out
+        await supabase.auth.signOut();
+      }
+    } catch {
+      // ignore
     }
-    return false;
+    set({ user: null, isLoading: false });
   },
 
-  logout: () => {
+  login: async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return error.message;
+
+    const { data: profile, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', data.user.id)
+      .single();
+
+    if (profileError || !profile) {
+      await supabase.auth.signOut();
+      return '用户信息不存在';
+    }
+
+    if (profile.status !== 'active') {
+      await supabase.auth.signOut();
+      return '账号已停用';
+    }
+
+    set({ user: profile as User });
+    return null; // success
+  },
+
+  logout: async () => {
+    await supabase.auth.signOut();
     set({ user: null });
-    localStorage.removeItem('currentUser');
   },
 
   isAdmin: () => get().user?.role === 'ADMIN',

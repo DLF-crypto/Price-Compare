@@ -17,6 +17,8 @@ export default function EmployeesPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState('');
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -37,6 +39,7 @@ export default function EmployeesPage() {
     setRole('USER');
     setStatus('active');
     setEditing(null);
+    setFormError('');
   };
 
   const openCreate = () => { resetForm(); setModalOpen(true); };
@@ -48,19 +51,27 @@ export default function EmployeesPage() {
     setPassword('');
     setRole(employee.role);
     setStatus(employee.status);
+    setFormError('');
     setModalOpen(true);
   };
 
-  const handleSave = () => {
-    if (!name || !email) return;
+  const handleSave = async () => {
+    if (!name) return;
+    setSaving(true);
+    setFormError('');
+
     if (editing) {
-      const data: Partial<User> = { name, email, role, status };
-      if (password) data.password = password;
-      update(editing.id, data);
+      await update(editing.id, { name, role, status });
     } else {
-      if (!password) return;
-      add({ name, email, password, role, status });
+      if (!email || !password) { setSaving(false); return; }
+      const err = await add({ name, email, password, role, status });
+      if (err) {
+        setFormError(err);
+        setSaving(false);
+        return;
+      }
     }
+    setSaving(false);
     setModalOpen(false);
     resetForm();
   };
@@ -105,8 +116,8 @@ export default function EmployeesPage() {
       render: (row) => (
         <div className="flex justify-center gap-2">
           <Button size="sm" variant="ghost" onClick={() => openEdit(row)}>编辑</Button>
-          <Button size="sm" variant="danger" onClick={() => {
-            if (confirm('确定删除该员工？')) remove(row.id);
+          <Button size="sm" variant="danger" onClick={async () => {
+            if (confirm('确定删除该员工？')) await remove(row.id);
           }}>删除</Button>
         </div>
       ),
@@ -142,14 +153,28 @@ export default function EmployeesPage() {
       >
         <div className="form-fields">
           <Input label="姓名" value={name} onChange={(e) => setName(e.target.value)} placeholder="请输入姓名" />
-          <Input label="邮箱" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="请输入邮箱" />
-          <Input
-            label={editing ? '密码（留空则不修改）' : '密码'}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={editing ? '留空则不修改' : '请输入密码'}
-          />
+          {!editing && (
+            <>
+              <Input label="邮箱" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="请输入邮箱" />
+              <Input
+                label="密码"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="请输入密码"
+              />
+            </>
+          )}
+          {editing && (
+            <div className="text-sm text-slate-500 bg-slate-50 rounded-lg" style={{ padding: '10px 16px' }}>
+              邮箱: {editing.email}（邮箱和密码暂不支持修改）
+            </div>
+          )}
+          {formError && (
+            <div className="text-sm text-red-500 bg-red-50 rounded-lg" style={{ padding: '10px 16px' }}>
+              {formError}
+            </div>
+          )}
           <div className="form-grid grid-cols-2">
             <Select
               label="角色"
@@ -166,7 +191,9 @@ export default function EmployeesPage() {
           </div>
           <div className="form-actions">
             <Button variant="secondary" onClick={() => { setModalOpen(false); resetForm(); }}>取消</Button>
-            <Button onClick={handleSave} disabled={!name || !email || (!editing && !password)}>保存</Button>
+            <Button onClick={handleSave} disabled={saving || !name || (!editing && (!email || !password))}>
+              {saving ? '保存中...' : '保存'}
+            </Button>
           </div>
         </div>
       </Modal>

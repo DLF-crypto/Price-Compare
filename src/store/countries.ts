@@ -1,43 +1,52 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
+import { supabase } from '@/lib/supabase';
 import type { Country } from '@/types';
 
 interface CountryState {
   countries: Country[];
-  load: () => void;
-  add: (data: Omit<Country, 'id' | 'createdAt'>) => void;
-  update: (id: string, data: Partial<Country>) => void;
-  remove: (id: string) => void;
+  load: () => Promise<void>;
+  add: (data: Omit<Country, 'id' | 'createdAt'>) => Promise<void>;
+  update: (id: string, data: Partial<Country>) => Promise<void>;
+  remove: (id: string) => Promise<void>;
 }
 
-function persist(countries: Country[]) {
-  localStorage.setItem('countries', JSON.stringify(countries));
-}
-
-export const useCountryStore = create<CountryState>((set, get) => ({
+export const useCountryStore = create<CountryState>((set) => ({
   countries: [],
 
-  load: () => {
-    const data: Country[] = JSON.parse(localStorage.getItem('countries') || '[]');
-    set({ countries: data });
+  load: async () => {
+    const { data } = await supabase
+      .from('countries')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ countries: (data ?? []) as Country[] });
   },
 
-  add: (data) => {
-    const item: Country = { ...data, id: uuidv4(), createdAt: new Date().toISOString() };
-    const updated = [...get().countries, item];
-    set({ countries: updated });
-    persist(updated);
+  add: async (data) => {
+    const item = { ...data, id: uuidv4() };
+    await supabase.from('countries').insert(item);
+    const { data: all } = await supabase
+      .from('countries')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ countries: (all ?? []) as Country[] });
   },
 
-  update: (id, data) => {
-    const updated = get().countries.map((c) => (c.id === id ? { ...c, ...data } : c));
-    set({ countries: updated });
-    persist(updated);
+  update: async (id, data) => {
+    await supabase.from('countries').update(data).eq('id', id);
+    const { data: all } = await supabase
+      .from('countries')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ countries: (all ?? []) as Country[] });
   },
 
-  remove: (id) => {
-    const updated = get().countries.filter((c) => c.id !== id);
-    set({ countries: updated });
-    persist(updated);
+  remove: async (id) => {
+    await supabase.from('countries').delete().eq('id', id);
+    const { data } = await supabase
+      .from('countries')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ countries: (data ?? []) as Country[] });
   },
 }));

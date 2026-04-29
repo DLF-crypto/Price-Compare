@@ -10,12 +10,13 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   if (user) {
     return <Navigate to="/compare" replace />;
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -24,11 +25,14 @@ export default function LoginPage() {
       return;
     }
 
-    const success = login(email, password);
-    if (success) {
-      navigate('/compare');
+    setLoading(true);
+    const err = await login(email, password);
+    setLoading(false);
+
+    if (err) {
+      setError(err);
     } else {
-      setError('邮箱或密码错误');
+      navigate('/compare');
     }
   };
 
@@ -68,27 +72,11 @@ export default function LoginPage() {
             )}
 
             <div style={{ marginTop: '8px' }}>
-              <Button type="submit" className="w-full" size="lg">
-                登 录
+              <Button type="submit" className="w-full" size="lg" disabled={loading}>
+                {loading ? '登录中...' : '登 录'}
               </Button>
             </div>
           </form>
-
-          <div style={{ marginTop: '28px', paddingTop: '20px' }} className="border-t border-slate-100">
-            <p className="text-xs text-slate-400 text-center" style={{ marginBottom: '12px' }}>测试账号</p>
-            <div className="grid grid-cols-2 text-xs" style={{ gap: '12px' }}>
-              <div className="bg-slate-50 rounded-lg text-center" style={{ padding: '12px' }}>
-                <p className="text-slate-600 font-medium">管理员</p>
-                <p className="text-slate-400">admin@guokui.com</p>
-                <p className="text-slate-400">admin123</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg text-center" style={{ padding: '12px' }}>
-                <p className="text-slate-600 font-medium">普通用户</p>
-                <p className="text-slate-400">user@guokui.com</p>
-                <p className="text-slate-400">user123</p>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>

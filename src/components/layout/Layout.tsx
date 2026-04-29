@@ -5,6 +5,15 @@ import { useAuthStore } from '@/store/auth';
 
 export function Layout() {
   const user = useAuthStore((s) => s.user);
+  const isLoading = useAuthStore((s) => s.isLoading);
+
+  if (isLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-[#f8fafc]">
+        <div className="text-slate-400 text-sm">加载中...</div>
+      </div>
+    );
+  }
 
   if (!user) {
     return <Navigate to="/login" replace />;

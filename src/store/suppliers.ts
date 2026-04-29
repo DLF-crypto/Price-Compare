@@ -1,50 +1,52 @@
 import { create } from 'zustand';
 import { v4 as uuidv4 } from 'uuid';
-import type { Supplier, SupplierType } from '@/types';
+import { supabase } from '@/lib/supabase';
+import type { Supplier } from '@/types';
 
 interface SupplierState {
   suppliers: Supplier[];
-  load: () => void;
-  add: (data: Omit<Supplier, 'id' | 'createdAt'>) => void;
-  update: (id: string, data: Partial<Supplier>) => void;
-  remove: (id: string) => void;
+  load: () => Promise<void>;
+  add: (data: Omit<Supplier, 'id' | 'createdAt'>) => Promise<void>;
+  update: (id: string, data: Partial<Supplier>) => Promise<void>;
+  remove: (id: string) => Promise<void>;
 }
 
-function persist(suppliers: Supplier[]) {
-  localStorage.setItem('suppliers', JSON.stringify(suppliers));
-}
-
-function normalize(raw: Record<string, unknown>): Supplier {
-  const s = raw as unknown as Supplier & { supplierType?: SupplierType };
-  if (Array.isArray(s.supplierTypes)) return s;
-  return { ...s, supplierTypes: s.supplierType ? [s.supplierType] : [] };
-}
-
-export const useSupplierStore = create<SupplierState>((set, get) => ({
+export const useSupplierStore = create<SupplierState>((set) => ({
   suppliers: [],
 
-  load: () => {
-    const raw: Record<string, unknown>[] = JSON.parse(localStorage.getItem('suppliers') || '[]');
-    const data = raw.map(normalize);
-    set({ suppliers: data });
+  load: async () => {
+    const { data } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ suppliers: (data ?? []) as Supplier[] });
   },
 
-  add: (data) => {
-    const item: Supplier = { ...data, id: uuidv4(), createdAt: new Date().toISOString() };
-    const updated = [...get().suppliers, item];
-    set({ suppliers: updated });
-    persist(updated);
+  add: async (data) => {
+    const item = { ...data, id: uuidv4() };
+    await supabase.from('suppliers').insert(item);
+    const { data: all } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ suppliers: (all ?? []) as Supplier[] });
   },
 
-  update: (id, data) => {
-    const updated = get().suppliers.map((s) => (s.id === id ? { ...s, ...data } : s));
-    set({ suppliers: updated });
-    persist(updated);
+  update: async (id, data) => {
+    await supabase.from('suppliers').update(data).eq('id', id);
+    const { data: all } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ suppliers: (all ?? []) as Supplier[] });
   },
 
-  remove: (id) => {
-    const updated = get().suppliers.filter((s) => s.id !== id);
-    set({ suppliers: updated });
-    persist(updated);
+  remove: async (id) => {
+    await supabase.from('suppliers').delete().eq('id', id);
+    const { data } = await supabase
+      .from('suppliers')
+      .select('*')
+      .order('createdAt', { ascending: false });
+    set({ suppliers: (data ?? []) as Supplier[] });
   },
 }));
